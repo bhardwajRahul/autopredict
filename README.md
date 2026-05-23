@@ -94,21 +94,16 @@ Start with [QUICKSTART.md](QUICKSTART.md), then use:
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 - [docs/fair_prob_guidelines.md](docs/fair_prob_guidelines.md)
 
-## Scope Today
+## Included
 
-Good today:
+AutoPredict includes read-only Polymarket market scanning, explicit-data backtesting,
+scoring and calibration utilities, grouped slice diagnostics, and offline experiment
+tracking for strategy variants. Runs can be archived with dataset and configuration
+provenance so results are easier to compare and reproduce.
 
-- read-only live Polymarket scanning
-- explicit-data backtesting
-- proper scoring, calibration, and grouped slice diagnostics
-- offline self-improvement with chronological, regime, and market-family holdouts
-- meta-harness archives and frontier promotion
-
-Intentionally limited:
-
-- live order execution is disabled unless you wire and enable a venue adapter
-- default domain specialists are neutral no-edge models until verified data is configured
-- self-improvement is offline and audit-oriented, not autonomous live trading
+Live order execution requires a separately configured venue adapter and credentials.
+Built-in domain specialists are neutral baselines unless you supply verified data and
+models.
 
 ## License
 
