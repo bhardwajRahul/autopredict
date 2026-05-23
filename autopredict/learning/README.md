@@ -63,13 +63,6 @@ python -m autopredict.cli learn improve \
 
 See [../../docs/LEARNING.md](../../docs/LEARNING.md) for the full learning guide.
 
-## Example
-
-Run the demo:
-```bash
-python examples/learning_demo.py --log-dir state/trades
-```
-
 ## Tests
 
 ```bash
