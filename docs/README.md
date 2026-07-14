@@ -13,7 +13,7 @@ Use this folder when you want more detail than the top-level README and quicksta
 - [BACKTESTING.md](BACKTESTING.md): how to interpret backtest results and avoid common evaluation mistakes
 - [METRICS.md](METRICS.md): definitions and target ranges for the reported metrics
 - [LEARNING.md](LEARNING.md): how to use the built-in feedback loop to improve the agent iteratively
-- [DEPLOYMENT.md](DEPLOYMENT.md): paper and live trading boundaries
+- [DEPLOYMENT.md](DEPLOYMENT.md): paper deployment and the disabled live-execution boundary
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md): common setup, data, and execution issues
 - [fair_prob_guidelines.md](fair_prob_guidelines.md): a practical guide for generating better `fair_prob` estimates
 

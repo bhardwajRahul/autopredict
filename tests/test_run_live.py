@@ -7,6 +7,8 @@ import importlib.util
 from pathlib import Path
 import sys
 
+import pytest
+
 from autopredict.config import (
     BacktestConfig,
     ExperimentConfig,
@@ -36,6 +38,26 @@ assert _RUN_LIVE_SPEC is not None and _RUN_LIVE_SPEC.loader is not None
 run_live = importlib.util.module_from_spec(_RUN_LIVE_SPEC)
 sys.modules[_RUN_LIVE_SPEC.name] = run_live
 _RUN_LIVE_SPEC.loader.exec_module(run_live)
+
+
+def test_main_fails_closed_before_live_runtime_construction(monkeypatch) -> None:
+    """Direct invocation must stop before config, credentials, clients, or adapters."""
+
+    calls: list[str] = []
+
+    def unexpected_call(*args, **kwargs):
+        calls.append("called")
+        raise AssertionError("disabled live entrypoint reached runtime construction")
+
+    monkeypatch.setattr(run_live, "load_config", unexpected_call)
+    monkeypatch.setattr(run_live, "collect_missing_env_vars", unexpected_call)
+    monkeypatch.setattr(run_live, "_create_venue_adapter", unexpected_call)
+    monkeypatch.setattr(run_live, "LiveTrader", unexpected_call)
+
+    with pytest.raises(SystemExit, match="supported commands is disabled"):
+        run_live.main()
+
+    assert calls == []
 
 
 def _config(tmp_path: Path) -> ExperimentConfig:

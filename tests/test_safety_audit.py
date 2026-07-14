@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from autopredict.cli import main as cli_main
 from autopredict.live.safety_audit import run_safety_audit
 
 
@@ -13,6 +16,23 @@ def test_safety_audit_passes_without_live_config() -> None:
     assert result.passed is True
     assert result.checks["explicit_data_required"] is True
     assert result.checks["default_domain_models_are_no_edge"] is True
+
+
+def test_installed_live_entrypoint_is_not_published() -> None:
+    pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+
+    assert "autopredict-live" not in pyproject.read_text(encoding="utf-8")
+
+
+def test_primary_cli_live_trade_command_remains_disabled(monkeypatch) -> None:
+    def unexpected_defaults_load():
+        raise AssertionError("disabled live command loaded configuration")
+
+    monkeypatch.setattr("autopredict.cli._load_defaults", unexpected_defaults_load)
+    monkeypatch.setattr("sys.argv", ["autopredict", "trade-live"])
+
+    with pytest.raises(SystemExit, match="trade-live is disabled"):
+        cli_main()
 
 
 def test_safety_audit_blocks_live_config_with_missing_env(

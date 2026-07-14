@@ -50,7 +50,6 @@ Repository = "https://github.com/howdymary/autopredict"
 
 [project.scripts]
 autopredict = "autopredict.cli:main"
-autopredict-live = "scripts.run_live:main"
 autopredict-paper = "scripts.run_paper:main"
 
 [tool.setuptools]

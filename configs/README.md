@@ -5,7 +5,7 @@ This directory contains configuration files for AutoPredict trading experiments.
 ## Files
 
 - `paper_trading.yaml` - Safe paper trading configuration (no real money)
-- `live_trading.yaml.example` - Template for live trading (DANGER: real money)
+- `live_trading.yaml.example` - Inactive reference config retained for safety-audit tests
 
 ## Usage
 
@@ -20,51 +20,20 @@ autopredict-paper --config configs/paper_trading.yaml
 
 You can freely experiment with paper trading configurations.
 
-### Live Trading (DANGER)
+### Live Trading (Disabled)
 
-Live trading uses REAL MONEY and REAL APIs. Follow these steps carefully:
-
-1. **Copy the template:**
-   ```bash
-   cp configs/live_trading.yaml.example configs/live_trading.yaml
-   ```
-
-2. **Set up environment variables:**
-   ```bash
-   # Add to your ~/.bashrc or ~/.zshrc
-   export POLYMARKET_API_KEY="your-api-key-here"
-   export POLYMARKET_API_SECRET="your-api-secret-here"
-
-   # Or set for current session
-   export POLYMARKET_API_KEY="..."
-   export POLYMARKET_API_SECRET="..."
-   ```
-
-3. **Edit the configuration:**
-   - Open `configs/live_trading.yaml`
-   - Carefully review ALL risk limits
-   - Start with SMALL limits (e.g., max_daily_loss: 10.0)
-   - Adjust based on your risk tolerance
-
-4. **Test in dry-run mode first:**
-   ```bash
-   autopredict-live --config configs/live_trading.yaml --dry-run
-   ```
-
-5. **Run live (requires confirmation):**
-   ```bash
-   autopredict-live --config configs/live_trading.yaml
-   # You will be prompted to type "CONFIRM LIVE" to proceed
-   ```
+Live execution through supported commands is intentionally unavailable. The package
+does not install an `autopredict-live` command, `autopredict trade-live` fails closed,
+and direct invocation of `scripts/run_live.py` exits before loading credentials or
+creating a venue adapter. Lower-level Python APIs remain for offline fake-adapter tests
+only and are not safety-approved. Do not copy this reference file into an operational
+config or provision trading credentials for AutoPredict.
 
 ## Important Notes
 
-- **NEVER** commit `live_trading.yaml` to git (it's in `.gitignore`)
 - Always start with paper trading to validate your strategy
-- Monitor live trading continuously
-- Test the kill switch before going live
+- Use the read-only scanner or paper mode while live execution is disabled
 - Keep all logs for post-trade analysis
-- Use testnet if available before production
 
 ## Configuration Structure
 
@@ -90,8 +59,7 @@ risk:
 venue:
   # Trading venue settings
   name: polymarket
-  mode: paper  # or "live"
-  api_key: ${POLYMARKET_API_KEY}
+  mode: paper  # live execution is disabled
   ...
 
 backtest:
@@ -114,11 +82,10 @@ Configuration files support environment variable substitution:
 - `${VAR_NAME}` - Required variable (error if not set)
 - `${VAR_NAME:default}` - Optional with default value
 
-Example:
+Example for a non-secret data path:
 ```yaml
-venue:
-  api_key: ${POLYMARKET_API_KEY}
-  base_url: ${API_BASE_URL:https://api.polymarket.com}
+data:
+  root: ${AUTOPREDICT_DATA_ROOT:./data}
 ```
 
 ## Safety Features
@@ -131,4 +98,4 @@ All configurations include multiple safety layers:
 4. **Kill Switch**: Emergency stop at severe loss level
 5. **Position Timeouts**: Force close stale positions
 
-Adjust these based on your risk tolerance and capital.
+Treat these as simulation controls, not live-readiness evidence.

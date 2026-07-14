@@ -112,7 +112,10 @@ scoring and calibration utilities, grouped slice diagnostics, and offline experi
 tracking for strategy variants. Runs can be archived with dataset and configuration
 provenance so results are easier to compare and reproduce.
 
-Live order execution requires a separately configured venue adapter and credentials.
+Live execution through supported commands is disabled: no `autopredict-live` console
+script is installed, `autopredict trade-live` fails closed, and the retained runner exits
+before client construction. Lower-level live Python APIs remain only for offline tests and
+are not safety-approved. Use the read-only scanner or paper mode instead.
 Built-in domain specialists are neutral baselines unless you supply verified data and
 models.
 

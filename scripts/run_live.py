@@ -1,21 +1,9 @@
 #!/usr/bin/env python3
-"""Live trading runner for AutoPredict.
+"""Retained experimental live runtime with a fail-closed command boundary.
 
-DANGER: This script executes REAL trades with REAL money.
-
-Multiple safety checks are in place:
-1. Configuration must explicitly set mode='live'
-2. User must confirm live trading at startup
-3. All risk limits are enforced
-4. Kill switch activates on severe losses
-5. All activity is logged
-
-Usage:
-    # Dry run (no actual trades)
-    python scripts/run_live.py --config configs/live_trading.yaml --dry-run
-
-    # Live run (requires confirmation)
-    python scripts/run_live.py --config configs/live_trading.yaml
+Direct invocation exits before configuration, credentials, clients, or adapters are
+loaded. Lower-level functions remain available only for offline fake-adapter tests and
+future independent safety review; they are not an approved public execution surface.
 """
 
 from __future__ import annotations
@@ -105,6 +93,13 @@ _POLITICS_GEOPOLITICS_KEYWORDS = (
     "treaty",
 )
 _BREAKING_NEWS_KEYWORDS = ("breaking", "urgent", "indicted", "resign", "ceasefire", "tariff")
+
+LIVE_EXECUTION_DISABLED_MESSAGE = (
+    "Live order execution through supported commands is disabled: AutoPredict's "
+    "live runner has not passed the required shadow-trading and safety gates. "
+    "Use `autopredict scan-live` for read-only market data or `autopredict-paper` "
+    "for simulated execution."
+)
 
 
 @dataclass
@@ -708,6 +703,12 @@ def confirm_live_trading(config) -> bool:
 
 
 def main():
+    """Fail closed while the experimental live runtime remains unapproved."""
+    raise SystemExit(LIVE_EXECUTION_DISABLED_MESSAGE)
+
+    # The implementation below is intentionally unreachable. It remains available
+    # for fake-adapter tests and a future safety review, but no direct or installed
+    # command may enter it while live execution is disabled.
     parser = argparse.ArgumentParser(
         description="Run live trading (DANGER: real money at risk)"
     )

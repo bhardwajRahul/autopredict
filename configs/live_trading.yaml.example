@@ -1,24 +1,17 @@
-# Live Trading Configuration Template
-# DANGER: This configuration uses REAL MONEY
+# Inactive Live-Mode Safety Fixture
+# INACTIVE REFERENCE ONLY: supported live commands are hard-disabled.
+# This file is retained for offline safety-audit tests. It cannot enable orders,
+# must not be copied into an operational config, and does not justify provisioning
+# venue credentials.
 #
-# Instructions:
-# 1. Copy this file to live_trading.yaml (NOT in version control!)
-# 2. Set your API keys as environment variables:
-#    export POLYMARKET_API_KEY="your-key-here"
-#    export POLYMARKET_API_SECRET="your-secret-here"
-#    export POLYMARKET_API_PASSPHRASE="your-passphrase-here"
-#    export POLYMARKET_PRIVATE_KEY="your-private-key-here"
-#    export POLYMARKET_FUNDER="0xyour-funder-address"
-# 3. Review and adjust all limits carefully
-# 4. Start with small limits until comfortable
-# 5. NEVER commit live_trading.yaml to git
+# This deliberately contains no credentials or production instructions.
 
-name: live_trading_experiment
-description: LIVE TRADING - REAL MONEY AT RISK
+name: inactive_live_safety_fixture
+description: Inactive live-mode reference for offline safety tests
 
 strategy:
   name: conservative_live
-  min_edge: 0.08                    # Higher minimum edge for live trading
+  min_edge: 0.08                    # Reference value only; execution is disabled
   kelly_fraction: 0.20              # More conservative Kelly fraction
   max_position_pct: 0.01            # Max 1% of bankroll per position
   aggressive_edge: 0.15             # Higher threshold for market orders
@@ -29,59 +22,49 @@ strategy:
   limit_price_improvement_ticks: 2.0  # More aggressive limit pricing
 
 risk:
-  max_position_per_market: 50.0     # ADJUST THIS - max per market
-  max_total_exposure: 200.0         # ADJUST THIS - total exposure limit
-  max_daily_loss: 25.0              # ADJUST THIS - daily loss limit
-  kill_switch_threshold: -50.0      # ADJUST THIS - emergency stop
+  max_position_per_market: 50.0     # Offline validation value
+  max_total_exposure: 200.0         # Offline validation value
+  max_daily_loss: 25.0              # Offline validation value
+  kill_switch_threshold: -50.0      # Offline validation value
   max_positions: 10                 # Fewer simultaneous positions
   max_correlation_exposure: 0.2     # Lower correlation exposure
   position_timeout_hours: 72.0      # Close positions after 3 days
-  enable_kill_switch: true          # MUST BE TRUE for live trading
+  enable_kill_switch: true          # Required by offline safety validation
 
 venue:
   name: polymarket
-  mode: live                        # LIVE MODE - REAL MONEY
-  api_key: ${POLYMARKET_API_KEY}    # Load from environment variable
-  api_secret: ${POLYMARKET_API_SECRET}  # Load from environment variable
-  # POLYMARKET_API_PASSPHRASE, POLYMARKET_PRIVATE_KEY, and POLYMARKET_FUNDER
-  # are read directly from the environment by the live adapter.
+  mode: live                        # Test input only; entrypoints fail closed
+  api_key: null                     # Deliberately inert
+  api_secret: null                  # Deliberately inert
   base_url: null                    # Use default URL
   max_requests_per_minute: 30       # Conservative rate limiting
   timeout_seconds: 30.0
-  enable_websocket: true            # Use websocket for real-time data
-  testnet: false                    # PRODUCTION - set to true for testnet
+  enable_websocket: false           # No live transport in this fixture
+  testnet: true                     # Inert validation value
 
 backtest:
-  initial_bankroll: 1000.0          # Your actual starting capital
-  commission_rate: 0.01             # Actual commission rate
-  slippage_model: market_impact     # Realistic slippage model
-  slippage_bps: 10.0                # Conservative slippage estimate
+  initial_bankroll: 1000.0          # Test value only
+  commission_rate: 0.01             # Test value only
+  slippage_model: market_impact
+  slippage_bps: 10.0
   start_date: null
   end_date: null
-  data_source: live                 # Live market data
+  data_source: none                 # No runtime data source
 
 logging:
-  log_dir: ./logs/live              # IMPORTANT: Different directory for live logs
-  log_level: INFO                   # Use INFO or WARNING for production
-  log_trades: true                  # MUST log all trades
-  log_decisions: true               # Log all decisions
-  log_performance: true             # Log performance snapshots
-  performance_interval_minutes: 15.0  # More frequent performance logging
-  structured_format: true           # Use JSON format
-  console_output: true              # Output to console
+  log_dir: ./logs/inactive-live-fixture
+  log_level: INFO
+  log_trades: true
+  log_decisions: true
+  log_performance: true
+  performance_interval_minutes: 15.0
+  structured_format: true
+  console_output: true
 
 metadata:
   created: "2026-03-26"
-  purpose: "Live trading - REAL MONEY"
+  purpose: "Inactive live-mode safety-audit fixture"
   tags:
     - live
-    - production
-    - danger
-
-  # IMPORTANT NOTES:
-  # - Start with SMALL limits
-  # - Monitor continuously when running
-  # - Have a plan to manually intervene
-  # - Test kill switch before going live
-  # - Keep logs for analysis
-  # - Never commit this file to git after adding real keys
+    - disabled
+    - offline-test
