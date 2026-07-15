@@ -1,6 +1,13 @@
 # AutoPredict Deployment Guide
 
-Complete guide for deploying AutoPredict trading strategies in paper and live modes.
+Guide for paper/shadow deployment and the current live-execution safety boundary.
+
+> **Live execution through supported commands is disabled.** AutoPredict does not install an
+> `autopredict-live` command, `autopredict trade-live` fails closed, and direct
+> invocation of `scripts/run_live.py` exits before loading configuration or
+> constructing a venue client. Lower-level live Python APIs remain for offline
+> fake-adapter tests and are not safety-approved. The live runtime remains
+> experimental pending the shadow-trading and safety gates in the active product plan.
 
 ## Table of Contents
 
@@ -15,10 +22,10 @@ Complete guide for deploying AutoPredict trading strategies in paper and live mo
 
 ## Overview
 
-AutoPredict supports two deployment modes:
+AutoPredict currently exposes one executable deployment mode:
 
 - **Paper Trading**: Simulated trading with no real money. Safe for development and testing.
-- **Live Trading**: Real trading with real capital. Requires explicit confirmation and has multiple safety layers.
+- **Live Trading**: Disabled. Lower-level code is retained only for offline fake-adapter testing and future safety review.
 
 ### Quick Start
 
@@ -26,8 +33,8 @@ AutoPredict supports two deployment modes:
 # Paper trading (safe, from an installed package)
 autopredict-paper --config /path/to/paper_trading.yaml
 
-# Live trading (DANGER - real money)
-autopredict-live --config /path/to/live_trading.yaml
+# Live execution intentionally fails closed
+autopredict trade-live
 ```
 
 ## Paper Trading
@@ -85,139 +92,18 @@ autopredict-paper --config configs/paper_trading.yaml --verbose
 
 ## Live Trading
 
-**WARNING: Live trading uses REAL MONEY on REAL markets.**
-
-### Prerequisites
-
-Before running live trading:
-
-1. **Extensive paper trading experience**
-   - Test your strategy thoroughly in paper mode
-   - Understand all configuration parameters
-   - Verify risk limits are appropriate
-
-2. **API credentials**
-   - Obtain API keys from your chosen venue (e.g., Polymarket)
-   - Verify API access and permissions
-   - Test in testnet/sandbox mode if available
-
-3. **Capital preparation**
-   - Fund your venue account
-   - Start with small amounts
-   - Never risk more than you can afford to lose
-
-4. **Monitoring setup**
-   - Plan to monitor continuously
-   - Set up alerts for errors/losses
-   - Have a manual intervention plan
-
-### Setup
-
-1. **Copy the live configuration template:**
-   ```bash
-   cp configs/live_trading.yaml.example configs/live_trading.yaml
-   ```
-
-2. **Set up environment variables:**
-   ```bash
-   # Add to ~/.bashrc or ~/.zshrc for persistence
-   export POLYMARKET_API_KEY="your-api-key-here"
-   export POLYMARKET_API_SECRET="your-api-secret-here"
-
-   # Or set for current session only
-   export POLYMARKET_API_KEY="..."
-   export POLYMARKET_API_SECRET="..."
-   ```
-
-3. **Edit the configuration:**
-   ```yaml
-   # configs/live_trading.yaml
-
-   risk:
-     max_position_per_market: 50.0    # Adjust based on your risk tolerance
-     max_total_exposure: 200.0        # Total capital you're willing to risk
-     max_daily_loss: 25.0             # Stop trading if daily loss hits this
-     kill_switch_threshold: -50.0     # Emergency stop at severe loss
-
-   venue:
-     mode: live                        # CRITICAL: Must be "live"
-     api_key: ${POLYMARKET_API_KEY}   # Loaded from environment
-     api_secret: ${POLYMARKET_API_SECRET}
-     testnet: false                    # Set to true for testnet
-   ```
-
-   For authenticated Polymarket trading you also need:
-   `POLYMARKET_API_PASSPHRASE`, `POLYMARKET_PRIVATE_KEY`, and `POLYMARKET_FUNDER`.
-
-4. **IMPORTANT: Add to .gitignore**
-   ```bash
-   # Make sure live_trading.yaml is in .gitignore
-   echo "configs/live_trading.yaml" >> .gitignore
-   ```
-
-### Running Live Trading
-
-**Step 1: Dry Run (Recommended)**
-
-Test configuration without executing trades:
+Neither supported command can be enabled by supplying configuration or credentials.
+The following invocations both terminate without creating a client or adapter:
 
 ```bash
-autopredict-live --config configs/live_trading.yaml --dry-run
+autopredict trade-live
+python scripts/run_live.py --config configs/live_trading.yaml.example
 ```
 
-This validates:
-- Configuration is correct
-- Risk limits are sane for live mode
-- Missing credential env vars are surfaced without blocking the dry run
-- Risk limits are reasonable
-
-**Step 2: Live Run**
-
-```bash
-autopredict-live --config configs/live_trading.yaml
-```
-
-You will be prompted:
-
-```
-WARNING: LIVE TRADING MODE
-This will execute REAL trades using REAL money on REAL markets.
-
-Configuration Summary:
-  Experiment: live_trading_experiment
-  Venue: polymarket
-  Risk Limits: ...
-
-Type 'CONFIRM LIVE TRADING' (exact case) to proceed:
->
-```
-
-Type exactly `CONFIRM LIVE TRADING` to proceed.
-
-**Step 3: Final Countdown**
-
-After confirmation, you have 5 seconds to abort:
-
-```
-LIVE TRADING STARTING IN 5 SECONDS
-Press Ctrl+C NOW to abort
-5...
-4...
-3...
-2...
-1...
-STARTING LIVE TRADING NOW
-```
-
-### Stopping Live Trading
-
-**Graceful Stop:**
-- Press `Ctrl+C` in the terminal
-- Positions remain open (you must close manually)
-
-**Emergency Stop (Kill Switch):**
-- Activated automatically if daily loss exceeds `kill_switch_threshold`
-- Can be activated manually (see [Kill Switch](#kill-switch) section)
+Use `autopredict scan-live` for read-only public market inspection and
+`autopredict-paper` for simulated execution. A future release must first provide
+real shadow execution, durable state/reconciliation, direction-aware risk tests,
+stale-feed and circuit-breaker coverage, and an explicit human safety review.
 
 ## Configuration
 
@@ -248,8 +134,7 @@ risk:
 venue:
   # Trading venue settings
   name: polymarket
-  mode: paper  # or "live"
-  api_key: ${POLYMARKET_API_KEY}
+  mode: paper  # live execution is disabled
   ...
 
 backtest:
@@ -267,13 +152,8 @@ logging:
 
 ### Environment Variables
 
-Use `${VAR_NAME}` syntax for sensitive values:
-
-```yaml
-venue:
-  api_key: ${POLYMARKET_API_KEY}              # Required
-  base_url: ${API_URL:https://api.default}    # Optional with default
-```
+Supported paper and read-only workflows do not require trading credentials. Do
+not provision venue API keys for AutoPredict while live execution is disabled.
 
 ### Configuration Validation
 
@@ -291,7 +171,8 @@ for warning in warnings:
 
 ## Safety Features
 
-AutoPredict includes multiple safety layers to protect your capital:
+AutoPredict includes risk controls for simulation and future safety testing.
+They are not evidence that live execution is approved or reachable.
 
 ### 1. Position Limits
 
@@ -335,7 +216,7 @@ Stops trading if daily losses exceed this amount. Resets at midnight.
 ```yaml
 risk:
   kill_switch_threshold: -100.0    # Negative value
-  enable_kill_switch: true         # Must be true for live trading
+  enable_kill_switch: true         # Keep enabled in paper/shadow testing
 ```
 
 Immediately halts all trading if daily P&L drops below threshold.
@@ -370,7 +251,7 @@ Every order is checked before execution:
 result = risk_manager.check_order(order, current_price)
 
 if result.passed:
-    # Safe to execute
+    # Safe to simulate
     trader.place_order(order)
 else:
     # Blocked by risk limits
@@ -379,15 +260,15 @@ else:
 
 ### 6. Mode Separation
 
-Paper and live traders are completely separate:
+Only the paper trader is a supported executable mode:
 
 ```python
 # Paper trader - safe simulation
 paper_trader = PaperTrader()
-
-# Live trader - requires confirmation
-live_trader = LiveTrader(venue_adapter)  # Prompts for confirmation
 ```
+
+Lower-level live classes remain solely for offline fake-adapter tests and a
+future independent safety review.
 
 ## Monitoring
 
@@ -419,7 +300,7 @@ All logs use JSON format for easy parsing:
   "price": 0.55,
   "commission": 1.0,
   "slippage_bps": 0.0,
-  "execution_mode": "live",
+  "execution_mode": "paper",
   "success": true
 }
 ```
@@ -463,41 +344,12 @@ logging:
 
 ### Common Issues
 
-**1. "Environment variable not found"**
+**1. Live execution is disabled**
 
-```bash
-# Make sure you've exported the variable
-echo $POLYMARKET_API_KEY
+This is the expected fail-closed behavior. Use `autopredict scan-live` or
+`autopredict-paper`; configuration and credentials cannot override the gate.
 
-# If empty, set it:
-export POLYMARKET_API_KEY="your-key-here"
-```
-
-**2. "Configuration is not in live mode"**
-
-```yaml
-# Make sure venue.mode is set correctly
-venue:
-  mode: live    # Not "paper"
-```
-
-**3. "Kill switch must be enabled for live trading"**
-
-```yaml
-# Enable kill switch (required for live mode)
-risk:
-  enable_kill_switch: true
-```
-
-**4. "API key is required for live trading mode"**
-
-```yaml
-venue:
-  mode: live
-  api_key: ${POLYMARKET_API_KEY}    # Must be set
-```
-
-**5. Kill switch activated unexpectedly**
+**2. Kill switch activated unexpectedly**
 
 ```bash
 # Check daily P&L in logs
@@ -552,41 +404,19 @@ logging:
    - Increase limits incrementally
    - Monitor closely when increasing
 
-### Live Trading
+### Disabled Live Boundary
 
-1. **Pre-flight checklist:**
-   - [ ] Strategy tested extensively in paper mode
-   - [ ] Configuration validated with dry-run
-   - [ ] API credentials tested (testnet if available)
-   - [ ] Risk limits reviewed and appropriate
-   - [ ] Monitoring plan in place
-   - [ ] Manual intervention plan ready
-
-2. **During operation:**
-   - Monitor continuously when starting
-   - Check logs regularly for errors
-   - Verify positions match expectations
-   - Watch for kill switch warnings
-   - Have manual stop plan ready
-
-3. **Position management:**
-   - Close positions before extended downtime
-   - Monitor for position timeouts
-   - Review open positions daily
-   - Don't let positions accumulate accidentally
-
-4. **After trading:**
-   - Review all trades in logs
-   - Analyze decisions (both trades and skips)
-   - Calculate actual vs expected performance
-   - Adjust configuration based on results
+- Do not provision trading credentials for AutoPredict.
+- Do not instantiate retained live classes outside offline fake-adapter tests.
+- Do not weaken the entrypoint guards to run an experiment.
+- Track shadow and safety prerequisites in the active product plan.
 
 ### Risk Management
 
-1. **Never disable the kill switch in live mode**
+1. **Keep the kill switch enabled during paper/shadow testing**
    ```yaml
    risk:
-     enable_kill_switch: true    # ALWAYS true for live trading
+     enable_kill_switch: true
    ```
 
 2. **Set conservative initial limits**
@@ -606,28 +436,11 @@ logging:
 
 ### Security
 
-1. **Never commit API keys**
-   ```bash
-   # Make sure .gitignore includes:
-   configs/live_trading.yaml
-   .env
-   ```
+1. **Do not provision or store venue credentials**
+   - Live execution is disabled and supported workflows do not need them.
+   - Never weaken the disabled entrypoint based on credential presence.
 
-2. **Use environment variables**
-   ```yaml
-   # Good
-   api_key: ${POLYMARKET_API_KEY}
-
-   # Bad (never do this)
-   api_key: "sk-1234567890"
-   ```
-
-3. **Limit API key permissions**
-   - Only grant necessary permissions
-   - Use testnet keys for testing
-   - Rotate keys periodically
-
-4. **Secure log files**
+2. **Secure log files**
    ```bash
    # Logs may contain sensitive data
    chmod 700 logs/
@@ -677,16 +490,12 @@ logging:
    tail -n 100 logs/trades.jsonl
    ```
 
-4. **Close positions manually if needed:**
-   - Use venue's web interface
-   - Or submit manual closing orders
-
-5. **Investigate root cause:**
+4. **Investigate root cause:**
    - Review all relevant logs
    - Check for configuration errors
    - Look for unexpected market conditions
 
-6. **Fix and test before resuming:**
+5. **Fix and test before resuming:**
    - Fix identified issues
    - Test fix in paper mode
    - Resume cautiously with low limits
@@ -706,7 +515,8 @@ For issues not covered here:
 
 ### Complete Configuration Example
 
-See `configs/paper_trading.yaml` and `configs/live_trading.yaml.example` for complete annotated examples.
+See `configs/paper_trading.yaml` for the supported annotated example. The live
+example is retained only for offline safety-audit tests.
 
 ### Risk Configuration Defaults
 
@@ -742,4 +552,4 @@ StrategyConfig(
 
 ---
 
-**Remember: Start with paper trading. Be conservative. Monitor continuously. Respect risk limits.**
+**Remember: live execution is disabled. Use paper mode, preserve evidence, and respect risk limits.**

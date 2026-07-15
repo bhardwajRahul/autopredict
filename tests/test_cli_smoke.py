@@ -100,7 +100,6 @@ def _run_live_script(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(ROOT / "scripts/run_live.py"), *args],
         cwd=ROOT,
-        check=True,
         capture_output=True,
         text=True,
     )
@@ -170,15 +169,16 @@ def test_packaged_legacy_modules_import() -> None:
         importlib.import_module(module_name)
 
 
-def test_live_script_dry_run_does_not_require_real_env_vars() -> None:
+def test_live_script_fails_closed_before_loading_environment() -> None:
     completed = _run_live_script(
         "--config",
         str(ROOT / "configs/live_trading.yaml.example"),
         "--dry-run",
     )
 
-    assert "DRY RUN MODE" in completed.stdout
-    assert "POLYMARKET_API_KEY" in completed.stdout
+    assert completed.returncode != 0
+    assert "supported commands is disabled" in completed.stderr
+    assert "POLYMARKET_API_KEY" not in completed.stdout + completed.stderr
 
 
 def test_custom_metrics_example_requires_explicit_trade_records() -> None:

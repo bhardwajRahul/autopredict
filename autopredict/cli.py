@@ -115,12 +115,9 @@ def command_score_latest(args: argparse.Namespace) -> None:
 
 
 def command_trade_live(args: argparse.Namespace) -> None:
-    defaults = _load_defaults()
-    if not bool(defaults.get("live_trading_enabled", False)):
-        raise SystemExit("trade-live is disabled by default in AutoPredict")
     raise SystemExit(
-        "Live order execution requires a configured venue adapter and credentials. "
-        "Use scan-live for read-only public Polymarket scans."
+        "trade-live is disabled in AutoPredict pending shadow-trading and safety gates. "
+        "Use scan-live for read-only public Polymarket data."
     )
 
 
