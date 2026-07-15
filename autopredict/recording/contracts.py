@@ -11,7 +11,6 @@ import shutil
 import tempfile
 from typing import Any, Callable, Iterable, cast
 
-
 CAPTURE_SCHEMA_VERSION = "autopredict.capture.v1"
 
 

@@ -27,7 +27,6 @@ from autopredict.recording import (
     write_capture,
 )
 
-
 START = datetime(2026, 1, 1, tzinfo=timezone.utc)
 FIXTURE = Path(__file__).parent / "fixtures/recording/polymarket-v1/manifest.json"
 OFFICIAL_SCHEMA_FIXTURE = (
