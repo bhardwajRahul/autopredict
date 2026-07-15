@@ -656,8 +656,8 @@ def test_default_three_one_walk_forward_can_evolve_on_small_local_folds(
 
     def fake_run(agent, fold_snapshots, starting_cash=1000.0):
         del fold_snapshots, starting_cash
-        strategy = agent.strategy._strategy
-        is_conservative = abs(strategy.kelly_fraction - 0.1875) <= 1e-9
+        strategy = agent.strategy
+        is_conservative = abs(strategy.policy.min_abs_edge - 0.05625) <= 1e-9
         return _make_result(
             log_score=0.30 if is_conservative else 0.20,
             brier_score=0.10 if is_conservative else 0.20,
