@@ -16,6 +16,8 @@ def test_safety_audit_passes_without_live_config() -> None:
     assert result.passed is True
     assert result.checks["explicit_data_required"] is True
     assert result.checks["default_domain_models_are_no_edge"] is True
+    assert result.checks["live_execution_request_allowed"] is True
+    assert result.metadata["live_execution_capability_enabled"] is False
 
 
 def test_installed_live_entrypoint_is_not_published() -> None:
@@ -49,9 +51,7 @@ def test_safety_audit_blocks_live_config_with_missing_env(
         monkeypatch.delenv(env_name, raising=False)
     config = tmp_path / "live.yaml"
     config.write_text(
-        "venue:\n"
-        "  mode: live\n"
-        "  api_key: ${POLYMARKET_API_KEY}\n",
+        "venue:\n" "  mode: live\n" "  api_key: ${POLYMARKET_API_KEY}\n",
         encoding="utf-8",
     )
 
@@ -102,7 +102,7 @@ def test_safety_audit_requires_all_polymarket_trading_credentials(
     ]
 
 
-def test_safety_audit_passes_live_config_when_required_credentials_are_present(
+def test_safety_audit_rejects_live_config_even_when_credentials_are_present(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -131,5 +131,11 @@ def test_safety_audit_passes_live_config_when_required_credentials_are_present(
 
     result = run_safety_audit(config)
 
-    assert result.passed is True
+    assert result.passed is False
+    assert result.checks["live_credentials_present"] is True
+    assert result.checks["live_execution_request_allowed"] is False
+    assert result.metadata["live_execution_capability_enabled"] is False
     assert result.metadata["missing_env_vars"] == []
+    assert any(
+        "credentials and configuration cannot make it ready" in item for item in result.findings
+    )

@@ -27,9 +27,9 @@ You can freely experiment with paper trading configurations.
 Live execution through supported commands is intentionally unavailable. The package
 does not install an `autopredict-live` command, `autopredict trade-live` fails closed,
 and direct invocation of `scripts/run_live.py` exits before loading credentials or
-creating a venue adapter. Lower-level Python APIs remain for offline fake-adapter tests
-only and are not safety-approved. Do not copy this reference file into an operational
-config or provision trading credentials for AutoPredict.
+creating a venue adapter. Direct Python trader and venue mutation paths also fail
+closed; credentials and injected adapters cannot enable them. Do not copy this
+reference file into an operational config or provision trading credentials.
 
 ## Important Notes
 

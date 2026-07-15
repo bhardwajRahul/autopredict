@@ -1,0 +1,30 @@
+{
+  "schema": "autopredict.live-readiness-evidence.v1",
+  "decision": "no_go",
+  "generated_at_utc": null,
+  "package": {
+    "version": null,
+    "git_commit": null,
+    "wheel_sha256": null
+  },
+  "shadow_gate": {
+    "required_continuous_duration_days": 7,
+    "observed_start_utc": null,
+    "observed_end_utc": null,
+    "clean": false,
+    "state_hash": null,
+    "capture_manifest_sha256": null,
+    "unresolved_exceptions": [
+      "MISSING_EVIDENCE"
+    ]
+  },
+  "human_authorization": {
+    "project_id": null,
+    "decision_owner": null,
+    "security_reviewer": null,
+    "operations_reviewer": null,
+    "approved_at_utc": null,
+    "approved": false
+  },
+  "notes": "Template only. Null and false values are intentional; do not treat this file as evidence."
+}

@@ -1,20 +1,18 @@
-"""Trading execution with paper and live mode separation.
+"""Paper execution and a retained, hard-disabled live compatibility class.
 
 Paper trading simulates execution without real capital.
-Live trading requires explicit confirmation and uses real APIs.
+Live order execution is unavailable in this release.
 """
 
 from __future__ import annotations
 
-from dataclasses import replace
 import random
-import sys
-import time
 from datetime import datetime
 from typing import Any, Protocol
-import warnings
 
 from autopredict.core.types import ExecutionReport, Order
+from autopredict.safety import reject_live_execution
+
 
 class VenueAdapter(Protocol):
     """Protocol for venue API adapters.
@@ -143,9 +141,8 @@ class PaperTrader:
         if order.limit_price is None:
             raise ValueError("limit_price required for limit orders")
 
-        is_executable = (
-            (order.side == "buy" and order.limit_price >= current_price) or
-            (order.side == "sell" and order.limit_price <= current_price)
+        is_executable = (order.side == "buy" and order.limit_price >= current_price) or (
+            order.side == "sell" and order.limit_price <= current_price
         )
 
         # Probabilistic fill based on limit_fill_rate
@@ -195,24 +192,10 @@ class PaperTrader:
 
 
 class LiveTrader:
-    """Real trading - requires explicit opt-in and confirmation.
+    """Retained import target whose construction and order path always fail closed.
 
-    Live trader executes real orders on production venues using real capital.
-    Multiple safety checks prevent accidental live trading.
-
-    CRITICAL SAFETY FEATURES:
-    - Requires explicit live mode confirmation
-    - Validates adapter credentials when the adapter exposes a preflight hook
-    - Verifies the adapter exposes a supported order-submission entrypoint
-    - Logs all activity to the trade history
-    - Cannot be instantiated without user confirmation
-
-    Example:
-        >>> # User must explicitly confirm live mode
-        >>> trader = LiveTrader(venue_adapter, safety_checks=True)
-        >>> # Will prompt: "LIVE TRADING MODE - Type 'CONFIRM LIVE' to proceed:"
-        >>> order = Order(...)
-        >>> report = trader.place_order(order)  # Real money at risk!
+    The parameters remain only to make old callers fail safely. Neither false safety
+    flags nor an injected adapter can bypass the process-wide release boundary.
     """
 
     def __init__(
@@ -221,124 +204,22 @@ class LiveTrader:
         safety_checks: bool = True,
         require_confirmation: bool = True,
     ):
-        """Initialize live trader with safety checks.
+        """Reject construction before inspecting the adapter or either flag."""
 
-        Args:
-            venue_adapter: Venue-specific API adapter
-            safety_checks: Whether to enable pre-trade risk checks (should always be True)
-            require_confirmation: Whether to require user confirmation (should always be True)
-
-        Raises:
-            RuntimeError: If live mode confirmation or adapter preflight fails
-        """
-        if not safety_checks:
-            warnings.warn(
-                "DANGER: Safety checks are disabled! This is not recommended for production.",
-                category=UserWarning,
-                stacklevel=2,
-            )
-
-        if require_confirmation and not self._confirm_live_mode():
-            raise RuntimeError("Live mode not confirmed - trader not initialized")
-
-        if not hasattr(venue_adapter, "submit_order") and not hasattr(venue_adapter, "place_order"):
-            raise TypeError("venue_adapter must implement submit_order(order) or place_order(order)")
-
-        if safety_checks and hasattr(venue_adapter, "validate_credentials"):
-            credentials_ok = venue_adapter.validate_credentials()
-            if not credentials_ok:
-                raise RuntimeError("Venue adapter credential validation failed")
-
-        self.venue_adapter = venue_adapter
-        self.safety_checks = safety_checks
-        self.trade_history: list[ExecutionReport] = []
-        self.is_active = True
-
-        print("LIVE TRADER INITIALIZED - REAL MONEY AT RISK")
-        print("=" * 60)
-
-    def _confirm_live_mode(self) -> bool:
-        """Require explicit user confirmation for live trading.
-
-        Returns:
-            True if user confirms, False otherwise
-        """
-        print("\n" + "=" * 60)
-        print("WARNING: LIVE TRADING MODE")
-        print("=" * 60)
-        print("This will execute REAL trades with REAL money.")
-        print("Are you sure you want to proceed?")
-        print("")
-        print("Type 'CONFIRM LIVE' (all caps) to proceed, or anything else to abort:")
-
-        try:
-            response = input("> ").strip()
-            if response == "CONFIRM LIVE":
-                print("Live trading mode CONFIRMED")
-                return True
-            else:
-                print("Live trading mode ABORTED")
-                return False
-        except (EOFError, KeyboardInterrupt):
-            print("\nLive trading mode ABORTED (interrupted)")
-            return False
+        del self, venue_adapter, safety_checks, require_confirmation
+        reject_live_execution()
 
     def place_order(self, order: Order) -> ExecutionReport:
-        """Execute real order on live venue.
+        """Reject even if a caller bypassed ``__init__`` with ``__new__``."""
 
-        Args:
-            order: Order to execute
-
-        Returns:
-            Execution report from venue
-
-        Raises:
-            RuntimeError: If trader is inactive or safety checks fail
-        """
-        if not self.is_active:
-            raise RuntimeError("Trader is inactive - cannot place orders")
-
-        order.validate()
-
-        # Log order submission
-        print(f"[LIVE] Submitting {order.side} order: {order.market_id} size={order.size} type={order.order_type}")
-
-        try:
-            # Submit to real venue
-            report = self._submit_order(order)
-            if report.execution_mode != "live":
-                report = replace(report, execution_mode="live")
-
-            # Log result
-            if report.is_success():
-                print(f"[LIVE] Order FILLED at {report.fill_price}")
-            else:
-                print(f"[LIVE] Order FAILED: {report.error_message}")
-
-            self.trade_history.append(report)
-            return report
-
-        except Exception as e:
-            # Create error report
-            error_report = ExecutionReport(
-                order=order,
-                filled_size=0.0,
-                avg_fill_price=None,
-                execution_mode="live",
-                error_message=str(e),
-            )
-            self.trade_history.append(error_report)
-
-            print(f"[LIVE] Order EXCEPTION: {e}")
-            raise
+        del self, order
+        reject_live_execution()
 
     def _submit_order(self, order: Order) -> ExecutionReport:
-        """Submit an order via either live-trader or market-adapter naming."""
-        if hasattr(self.venue_adapter, "submit_order"):
-            return self.venue_adapter.submit_order(order)
-        if hasattr(self.venue_adapter, "place_order"):
-            return self.venue_adapter.place_order(order)
-        raise TypeError("venue_adapter does not expose submit_order(order) or place_order(order)")
+        """Reject direct calls to the former internal mutation helper."""
+
+        del self, order
+        reject_live_execution()
 
     def kill_switch(self, reason: str = "Manual kill switch activated") -> None:
         """Immediately halt all trading activity.

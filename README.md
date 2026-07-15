@@ -19,11 +19,8 @@ cd autopredict
 python -m pip install -e .
 ```
 
-For the optional authenticated Polymarket order adapter:
-
-```bash
-python -m pip install -e ".[polymarket]"
-```
+No authenticated trading extra is published. Credentials do not enable live
+execution in this release.
 
 ## Live Scan
 
@@ -34,6 +31,9 @@ python -m autopredict.cli scan-live --limit 20 --top 5
 python -m autopredict.cli scan-live --events --limit 20 --top 5 --json
 python -m autopredict.cli safety-audit --config /path/to/your/live_trading.yaml
 ```
+
+The audit will return NO-GO for every configuration that requests live mode,
+including configurations with complete credentials.
 
 Market scans report observed Gamma prices plus public CLOB bid/ask/depth when available. Missing order-book data stays `null`/`n/a`; the scanner does not fill gaps with estimates.
 
@@ -131,10 +131,12 @@ scoring and calibration utilities, grouped slice diagnostics, and offline experi
 tracking for strategy variants. Runs can be archived with dataset and configuration
 provenance so results are easier to compare and reproduce.
 
-Live execution through supported commands is disabled: no `autopredict-live` console
-script is installed, `autopredict trade-live` fails closed, and the retained runner exits
-before client construction. Lower-level live Python APIs remain only for offline tests and
-are not safety-approved. Use the read-only scanner or paper mode instead.
+Live execution is hard-disabled: no `autopredict-live` console script is installed,
+`autopredict trade-live` and the retained runner fail closed, direct `LiveTrader`
+construction fails, and Polymarket order/cancel methods fail before credential or
+client access. Use the read-only scanner or credential-free shadow mode instead. The
+versioned [live-readiness report](docs/live-readiness/v1/NO_GO.md) records the current
+NO-GO decision and missing evidence.
 Built-in domain specialists are neutral baselines unless you supply verified data and
 models.
 

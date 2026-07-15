@@ -18,7 +18,7 @@ from autopredict.domains import (
     build_default_politics_model,
     build_default_weather_model,
 )
-
+from autopredict.safety import LIVE_EXECUTION_ENABLED
 
 POLYMARKET_LIVE_CREDENTIAL_ENV_VARS = (
     "POLYMARKET_API_KEY",
@@ -55,21 +55,31 @@ def run_safety_audit(config_path: str | Path | None = None) -> SafetyAuditResult
     metadata: dict[str, Any] = {}
 
     config_payload: Mapping[str, Any] = {}
+    live_requested = False
     if config_path is not None:
         config_payload = load_yaml(config_path, allow_missing_env=True)
         live_requested = _live_mode_requested(config_payload)
-        missing_env = tuple(sorted(_missing_live_env_vars(config_payload) if live_requested else set()))
+        missing_env = tuple(
+            sorted(_missing_live_env_vars(config_payload) if live_requested else set())
+        )
         checks["live_credentials_present"] = not (live_requested and missing_env)
         metadata["missing_env_vars"] = list(missing_env)
         metadata["live_mode_requested"] = live_requested
         if live_requested and missing_env:
             findings.append(
-                "live mode has unresolved environment variables: "
-                + ", ".join(missing_env)
+                "live mode has unresolved environment variables: " + ", ".join(missing_env)
             )
     else:
         checks["live_credentials_present"] = True
         metadata["live_mode_requested"] = False
+
+    metadata["live_execution_capability_enabled"] = LIVE_EXECUTION_ENABLED
+    checks["live_execution_request_allowed"] = not live_requested
+    if live_requested:
+        findings.append(
+            "live execution was requested, but this release has no live capability; "
+            "credentials and configuration cannot make it ready"
+        )
 
     neutral_models = _default_models_are_neutral()
     checks["default_domain_models_are_no_edge"] = neutral_models

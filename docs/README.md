@@ -16,6 +16,8 @@ Use this folder when you want more detail than the top-level README and quicksta
 - [METRICS.md](METRICS.md): definitions and target ranges for the reported metrics
 - [LEARNING.md](LEARNING.md): how to use the built-in feedback loop to improve the agent iteratively
 - [DEPLOYMENT.md](DEPLOYMENT.md): paper deployment and the disabled live-execution boundary
+- [Live-readiness NO-GO](live-readiness/v1/NO_GO.md): versioned decision, evidence gaps, threat model, and operator runbook
+- [../SECURITY.md](../SECURITY.md): security boundary and vulnerability reporting
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md): common setup, data, and execution issues
 - [fair_prob_guidelines.md](fair_prob_guidelines.md): a practical guide for generating better `fair_prob` estimates
 
