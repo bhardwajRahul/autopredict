@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -25,15 +27,30 @@ jobs:
       - name: Install package and dev dependencies
         run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
 
+      - name: Compile every tracked Python file
+        run: |
+          python - <<'PY'
+          import subprocess
+          import sys
+
+          files = subprocess.check_output(
+              ["git", "ls-files", "--", "*.py"],
+              text=True,
+          ).splitlines()
+          subprocess.run([sys.executable, "-m", "py_compile", *files], check=True)
+          PY
+
       - name: Run test suite
         run: python -m pytest tests -q
 
-  package:
+  quality:
     runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -41,18 +58,108 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Build wheel
+      - name: Install package and dev dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+
+      - name: Check formatting of changed Python files
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base_sha="$PR_BASE_SHA"
+          else
+            base_sha="$PUSH_BEFORE_SHA"
+          fi
+          if [[ -z "$base_sha" || "$base_sha" =~ ^0+$ ]]; then
+            closest_distance=""
+            while IFS= read -r remote_ref; do
+              if git merge-base --is-ancestor "$remote_ref" "$GITHUB_SHA"; then
+                distance="$(git rev-list --count "$remote_ref..$GITHUB_SHA")"
+                if (( distance > 0 )) && \
+                  [[ -z "$closest_distance" || distance -lt closest_distance ]]; then
+                  base_sha="$(git rev-parse "$remote_ref")"
+                  closest_distance="$distance"
+                fi
+              fi
+            done < <(
+              git for-each-ref --format='%(refname:short)' refs/remotes/origin \
+                | grep -v '^origin/HEAD$'
+            )
+            if [[ -z "$base_sha" || "$base_sha" =~ ^0+$ ]]; then
+              base_sha="$(git hash-object -t tree /dev/null)"
+            fi
+          fi
+          mapfile -d '' changed_python < <(
+            git diff --name-only -z --diff-filter=ACMRT "$base_sha" "$GITHUB_SHA" -- '*.py'
+          )
+          if (( ${#changed_python[@]} )); then
+            python -m black --check "${changed_python[@]}"
+          else
+            echo "No changed Python files to format-check."
+          fi
+
+      - name: Type-check the canonical typed baseline
+        run: |
+          python -m mypy --follow-imports=skip \
+            autopredict/core/types.py \
+            autopredict/evaluation/scoring.py \
+            scripts/check_package_imports.py
+
+  package:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Build source and wheel distributions
         run: python -m pip install --upgrade pip build && python -m build
 
-      - name: Install wheel
-        run: python -m pip install dist/*.whl
+      - name: Install wheel outside the checkout
+        run: |
+          python -m venv /tmp/autopredict-wheel
+          /tmp/autopredict-wheel/bin/python -m pip install --upgrade pip
+          /tmp/autopredict-wheel/bin/python -m pip install dist/*.whl
 
-      - name: Smoke test installed package
+      - name: Audit installed distribution
         run: |
           cd /tmp
-          python -c "import autopredict; import autopredict.config; print(autopredict.__version__)"
-          python -m autopredict.cli safety-audit
-          if python -m autopredict.cli backtest; then
+          /tmp/autopredict-wheel/bin/python -m scripts.check_package_imports --distribution autopredict
+          /tmp/autopredict-wheel/bin/python - <<'PY'
+          from importlib import metadata
+
+          distribution = metadata.distribution("autopredict")
+          actual = {
+              entry.name
+              for entry in distribution.entry_points
+              if entry.group == "console_scripts"
+          }
+          expected = {"autopredict", "autopredict-paper"}
+          if actual != expected:
+              raise SystemExit(
+                  f"unexpected installed console scripts: expected={sorted(expected)}, "
+                  f"actual={sorted(actual)}"
+              )
+          PY
+          /tmp/autopredict-wheel/bin/autopredict --help
+          /tmp/autopredict-wheel/bin/autopredict-paper --help
+          /tmp/autopredict-wheel/bin/autopredict safety-audit
+          test ! -e /tmp/autopredict-wheel/bin/autopredict-live
+          if /tmp/autopredict-wheel/bin/autopredict trade-live; then
+            echo "trade-live unexpectedly passed its safety gate"
+            exit 1
+          fi
+          if /tmp/autopredict-wheel/bin/autopredict backtest; then
             echo "backtest unexpectedly ran without an explicit --dataset"
             exit 1
           fi
