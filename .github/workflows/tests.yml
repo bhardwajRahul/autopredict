@@ -151,6 +151,40 @@ jobs:
                   f"actual={sorted(actual)}"
               )
           PY
+          cd /tmp
+          /tmp/autopredict-wheel/bin/python - <<'PY'
+          from autopredict.core.types import Order
+          from autopredict.live.trader import LiveTrader
+          from autopredict.markets.polymarket import PolymarketAdapter
+          from autopredict.safety import LiveExecutionDisabledError
+
+          class Untouchable:
+              def __getattribute__(self, name):
+                  raise AssertionError(f"disabled boundary touched {name}")
+
+          order = Order(
+              market_id="installed-wheel-test",
+              side="buy",
+              order_type="limit",
+              size=1.0,
+              limit_price=0.5,
+          )
+          attempts = (
+              lambda: LiveTrader(
+                  Untouchable(), safety_checks=False, require_confirmation=False
+              ),
+              lambda: PolymarketAdapter(trading_client=Untouchable()).place_order(order),
+              lambda: PolymarketAdapter(trading_client=Untouchable()).cancel_order(
+                  order.market_id, "order-id"
+              ),
+          )
+          for attempt in attempts:
+              try:
+                  attempt()
+              except LiveExecutionDisabledError:
+                  continue
+              raise SystemExit("installed wheel exposed a live mutation bypass")
+          PY
           /tmp/autopredict-wheel/bin/autopredict --help
           /tmp/autopredict-wheel/bin/autopredict-paper --help
           /tmp/autopredict-wheel/bin/autopredict safety-audit

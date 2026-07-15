@@ -5,9 +5,9 @@ Guide for paper/shadow deployment and the current live-execution safety boundary
 > **Live execution through supported commands is disabled.** AutoPredict does not install an
 > `autopredict-live` command, `autopredict trade-live` fails closed, and direct
 > invocation of `scripts/run_live.py` exits before loading configuration or
-> constructing a venue client. Lower-level live Python APIs remain for offline
-> fake-adapter tests and are not safety-approved. The live runtime remains
-> experimental pending the shadow-trading and safety gates in the active product plan.
+> constructing a venue client. Direct `LiveTrader` construction and Polymarket
+> order/cancel methods also fail before credential or client access. See the
+> versioned [NO-GO report](live-readiness/v1/NO_GO.md).
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ Guide for paper/shadow deployment and the current live-execution safety boundary
 AutoPredict currently exposes one executable deployment mode:
 
 - **Paper Trading**: Simulated trading with no real money. Safe for development and testing.
-- **Live Trading**: Disabled. Lower-level code is retained only for offline fake-adapter testing and future safety review.
+- **Live Trading**: Hard-disabled at command, Python trader, and venue-mutation boundaries.
 
 ### Quick Start
 
@@ -97,8 +97,8 @@ python scripts/run_live.py --config configs/live_trading.yaml.example
 
 Use `autopredict scan-live` for read-only public market inspection and
 `autopredict-paper` for simulated execution. A future release must first provide
-real shadow execution, durable state/reconciliation, direction-aware risk tests,
-stale-feed and circuit-breaker coverage, and an explicit human safety review.
+an independently reviewed, human-authorized live-enablement project. The present
+shadow implementation is not authorization to add a venue client.
 
 ## Configuration
 
@@ -262,8 +262,7 @@ Only the paper trader is a supported executable mode:
 paper_trader = PaperTrader()
 ```
 
-Lower-level live classes remain solely for offline fake-adapter tests and a
-future independent safety review.
+Direct live classes and venue mutation methods fail closed in this release.
 
 ## Monitoring
 
@@ -402,7 +401,7 @@ logging:
 ### Disabled Live Boundary
 
 - Do not provision trading credentials for AutoPredict.
-- Do not instantiate retained live classes outside offline fake-adapter tests.
+- Treat any attempt to bypass the direct Python guards as a security defect.
 - Do not weaken the entrypoint guards to run an experiment.
 - Track shadow and safety prerequisites in the active product plan.
 
@@ -463,17 +462,17 @@ logging:
    - Dashboard for real-time metrics
    - Automated health checks
 
-## Emergency Procedures
+## Shadow Emergency Procedures
 
 ### If Something Goes Wrong
 
-1. **Stop trading immediately:**
+1. **Stop shadow execution immediately:**
    ```bash
    # Press Ctrl+C in terminal
-   # Or activate kill switch manually
+   autopredict shadow cancel-all --state /path/to/autopredict.db --reason "operator stop"
    ```
 
-2. **Check positions:**
+2. **Check simulated positions:**
    ```python
    summary = risk_manager.get_positions_summary()
    print(summary)
@@ -490,7 +489,7 @@ logging:
    - Check for configuration errors
    - Look for unexpected market conditions
 
-5. **Fix and test before resuming:**
+5. **Fix and test before resuming shadow execution:**
    - Fix identified issues
    - Test fix in paper mode
    - Resume cautiously with low limits

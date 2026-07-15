@@ -8,7 +8,7 @@ import pytest
 
 from autopredict.core.types import Order
 from autopredict.markets.polymarket import PolymarketAdapter
-
+from autopredict.safety import LiveExecutionDisabledError
 
 RAW_MARKET = {
     "id": "540816",
@@ -133,7 +133,7 @@ def test_get_markets_skips_payloads_with_missing_live_fields(
     assert adapter.get_markets({"limit": 2}) == []
 
 
-def test_market_order_requires_live_ask(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_market_order_fails_before_market_or_book_access(monkeypatch: pytest.MonkeyPatch) -> None:
     adapter = PolymarketAdapter(
         api_key="key",
         api_secret="secret",
@@ -142,8 +142,16 @@ def test_market_order_requires_live_ask(monkeypatch: pytest.MonkeyPatch) -> None
         funder="0xfunder",
         trading_client=FakeTradingClient(),
     )
-    monkeypatch.setattr(adapter, "_find_raw_market", lambda market_id: RAW_MARKET)
-    monkeypatch.setattr(adapter, "_get_order_book", lambda token_id: {"bids": [], "asks": []})
+    monkeypatch.setattr(
+        adapter,
+        "_find_raw_market",
+        lambda market_id: pytest.fail("disabled mutation resolved a market"),
+    )
+    monkeypatch.setattr(
+        adapter,
+        "_get_order_book",
+        lambda token_id: pytest.fail("disabled mutation read an order book"),
+    )
 
     order = Order(
         market_id=f"polymarket-{RAW_MARKET['conditionId']}",
@@ -152,7 +160,7 @@ def test_market_order_requires_live_ask(monkeypatch: pytest.MonkeyPatch) -> None
         size=10.0,
     )
 
-    with pytest.raises(ValueError, match="missing executable asks"):
+    with pytest.raises(LiveExecutionDisabledError):
         adapter.place_order(order)
 
 
@@ -163,21 +171,26 @@ def test_validate_credentials_respects_dry_run_placeholders() -> None:
         adapter.validate_credentials(require_trading=True)
 
 
-def test_place_order_maps_bearish_order_to_no_token(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_mutations_fail_before_injected_client_or_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class UntouchableTradingClient:
+        def __getattribute__(self, name):
+            raise AssertionError(f"disabled mutation touched trading client attribute {name}")
+
     adapter = PolymarketAdapter(
         api_key="key",
         api_secret="secret",
         api_passphrase="passphrase",
         private_key="private",
         funder="0xfunder",
-        trading_client=FakeTradingClient(),
+        trading_client=UntouchableTradingClient(),
     )
 
-    monkeypatch.setattr(adapter, "_find_raw_market", lambda market_id: RAW_MARKET)
     monkeypatch.setattr(
         adapter,
-        "_get_order_book",
-        lambda token_id: YES_BOOK if token_id == "yes-token" else NO_BOOK,
+        "validate_credentials",
+        lambda **kwargs: pytest.fail("disabled mutation validated credentials"),
     )
 
     order = Order(
@@ -187,12 +200,11 @@ def test_place_order_maps_bearish_order_to_no_token(monkeypatch: pytest.MonkeyPa
         size=10.0,
         limit_price=0.42,
     )
-    report = adapter.place_order(order)
-
-    client = adapter._trading_client
-    assert client.created_args.token_id == "no-token"
-    assert client.created_args.side == "BUY"
-    assert client.created_args.price == pytest.approx(0.58)
-    assert client.posted_order_type == "GTC"
-    assert report.metadata["outcome"] == "NO"
-    assert report.metadata["submitted_price"] == pytest.approx(0.58)
+    with pytest.raises(LiveExecutionDisabledError):
+        adapter.place_order(order)
+    with pytest.raises(LiveExecutionDisabledError):
+        adapter.submit_order(order)
+    with pytest.raises(LiveExecutionDisabledError):
+        adapter.cancel_order(order.market_id, "order-123")
+    with pytest.raises(LiveExecutionDisabledError):
+        adapter._get_trading_client()

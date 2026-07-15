@@ -4,6 +4,7 @@ import pytest
 
 from autopredict.core.types import ExecutionReport as CoreExecutionReport
 from autopredict.live.trader import ExecutionReport, LiveTrader, Order, PaperTrader
+from autopredict.safety import LiveExecutionDisabledError
 
 
 class TestOrder:
@@ -362,10 +363,30 @@ class _CredentialCheckingAdapter(_PlaceOnlyAdapter):
 class TestLiveTrader:
     """Tests for live trading boundary behavior."""
 
-    def test_live_trader_accepts_market_adapter_place_order(self):
-        adapter = _PlaceOnlyAdapter()
-        trader = LiveTrader(adapter, safety_checks=True, require_confirmation=False)
+    @pytest.mark.parametrize(
+        ("safety_checks", "require_confirmation"),
+        [(True, True), (True, False), (False, True), (False, False)],
+    )
+    def test_live_trader_construction_always_fails_closed(
+        self,
+        safety_checks: bool,
+        require_confirmation: bool,
+    ) -> None:
+        class UntouchableAdapter:
+            def __getattribute__(self, name):
+                raise AssertionError(f"disabled boundary inspected adapter attribute {name}")
 
+        with pytest.raises(
+            LiveExecutionDisabledError, match="disabled in this AutoPredict release"
+        ):
+            LiveTrader(
+                UntouchableAdapter(),
+                safety_checks=safety_checks,
+                require_confirmation=require_confirmation,
+            )
+
+    def test_live_trader_place_order_rejects_init_bypass(self) -> None:
+        trader = LiveTrader.__new__(LiveTrader)
         order = Order(
             market_id="test",
             side="buy",
@@ -373,24 +394,18 @@ class TestLiveTrader:
             size=10.0,
             limit_price=0.55,
         )
-        report = trader.place_order(order)
 
-        assert report.execution_mode == "live"
-        assert report.filled
-        assert adapter.orders == [order]
-        assert trader.get_trade_history()[-1] == report
+        with pytest.raises(LiveExecutionDisabledError):
+            trader.place_order(order)
+        with pytest.raises(LiveExecutionDisabledError):
+            trader._submit_order(order)
 
-    def test_live_trader_rejects_missing_adapter_entrypoint(self):
-        with pytest.raises(TypeError, match="must implement submit_order\\(order\\) or place_order\\(order\\)"):
-            LiveTrader(_InvalidAdapter(), safety_checks=True, require_confirmation=False)
+    def test_live_trader_is_not_a_public_live_package_export(self) -> None:
+        import autopredict.live as live_package
 
-    def test_live_trader_checks_credentials_when_available(self):
-        with pytest.raises(RuntimeError, match="credential validation failed"):
-            LiveTrader(
-                _CredentialCheckingAdapter(credentials_ok=False),
-                safety_checks=True,
-                require_confirmation=False,
-            )
+        assert "LiveTrader" not in live_package.__all__
+        with pytest.raises(AttributeError):
+            getattr(live_package, "LiveTrader")
 
     def test_live_exports_core_execution_report(self):
         """Live trader should reuse the package-wide execution report type."""

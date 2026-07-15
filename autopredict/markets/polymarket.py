@@ -1,16 +1,15 @@
-"""Polymarket adapter with real public market-data access and live-order plumbing.
+"""Polymarket adapter with public market data and disabled authenticated mutations.
 
 This adapter intentionally splits the Polymarket integration into two layers:
 
 1. Public market discovery and order-book reads use the documented Gamma and CLOB
    HTTP APIs directly, so read-only functionality works without credentials.
-2. Authenticated trading uses the official ``py_clob_client`` when available.
+2. Every retained authenticated order/cancel boundary fails before credentials or
+   a trading client are accessed.
 
-The goal is to provide a real venue boundary instead of a placeholder while
-remaining honest about verification limits: read-only behavior is exercised
-directly against Polymarket's public endpoints, while authenticated order
-placement still depends on valid user credentials and the official trading
-client being installed in the runtime environment.
+The goal is to provide a real read-only venue boundary while remaining honest
+about verification limits. Authenticated order placement is unavailable in this
+release; no credential or trading-client combination enables it.
 """
 
 from __future__ import annotations
@@ -33,7 +32,7 @@ from autopredict.core.types import (
     OrderSide,
     OrderType,
 )
-
+from autopredict.safety import reject_live_execution
 
 DEFAULT_CLOB_URL = "https://clob.polymarket.com"
 DEFAULT_STAGING_CLOB_URL = "https://clob-staging.polymarket.com"
@@ -117,7 +116,7 @@ class _ResolvedToken:
 
 
 class PolymarketAdapter:
-    """Real Polymarket boundary with public data access and optional live trading."""
+    """Polymarket public-data boundary with hard-disabled live mutations."""
 
     def __init__(
         self,
@@ -145,9 +144,7 @@ class PolymarketAdapter:
         self.signature_type = int(signature_type)
         self.chain_id = int(chain_id)
         self.testnet = bool(testnet)
-        self.base_url = base_url or (
-            DEFAULT_STAGING_CLOB_URL if self.testnet else DEFAULT_CLOB_URL
-        )
+        self.base_url = base_url or (DEFAULT_STAGING_CLOB_URL if self.testnet else DEFAULT_CLOB_URL)
         self.gamma_url = gamma_url or DEFAULT_GAMMA_URL
         self.timeout_seconds = float(timeout_seconds)
         self.max_retries = int(max_retries)
@@ -213,8 +210,7 @@ class PolymarketAdapter:
         ]
         if missing:
             raise ValueError(
-                "Polymarket live trading requires credentials for: "
-                + ", ".join(sorted(missing))
+                "Polymarket live trading requires credentials for: " + ", ".join(sorted(missing))
             )
         if self.signature_type not in (0, 1, 2):
             raise ValueError("Polymarket signature_type must be one of 0, 1, or 2")
@@ -282,65 +278,22 @@ class PolymarketAdapter:
         return self._convert_market(raw_market)
 
     def place_order(self, order: Order) -> ExecutionReport:
-        """Place an order on Polymarket using the official CLOB client."""
+        """Reject before validating credentials, resolving markets, or using a client."""
 
-        self.validate_credentials(require_trading=True)
-
-        raw_market = self._find_raw_market(order.market_id)
-        if raw_market is None:
-            raise ValueError(f"Could not resolve Polymarket market '{order.market_id}'")
-
-        token = self._resolve_token_for_order(raw_market, order)
-        book = self._get_order_book(token.token_id)
-        tick_size = self._extract_tick_size(raw_market, book)
-        min_order_size = self._extract_min_order_size(raw_market, book)
-        if order.size < min_order_size:
-            raise ValueError(
-                f"Order size {order.size} is below Polymarket minimum order size {min_order_size}"
-            )
-
-        price = self._resolve_order_price(order, book, token, tick_size)
-        client = self._get_trading_client()
-        order_args, venue_order_type, create_options = self._build_live_order_args(
-            client=client,
-            token=token,
-            order=order,
-            price=price,
-            tick_size=tick_size,
-            raw_market=raw_market,
-        )
-
-        if create_options is None:
-            signed_order = client.create_order(order_args)
-        else:
-            signed_order = client.create_order(order_args, create_options)
-        response = client.post_order(signed_order, venue_order_type)
-        return self._convert_execution_report(
-            order=order,
-            response=response,
-            token=token,
-            venue_price=price,
-            semantic_price=(price if token.outcome == "YES" else 1.0 - price),
-            submitted_price=price,
-        )
+        del self, order
+        reject_live_execution()
 
     def submit_order(self, order: Order) -> ExecutionReport:
-        """Compatibility alias for live-trading adapters."""
+        """Reject the former live-trading compatibility alias."""
 
-        return self.place_order(order)
+        del self, order
+        reject_live_execution()
 
     def cancel_order(self, market_id: str, order_id: str) -> bool:
-        """Cancel an outstanding Polymarket order by order id."""
+        """Reject before validating credentials or accessing a trading client."""
 
-        del market_id
-        self.validate_credentials(require_trading=True)
-        response = self._get_trading_client().cancel(order_id)
-        if isinstance(response, dict):
-            if "success" in response:
-                return bool(response["success"])
-            if "canceled" in response:
-                return bool(response["canceled"])
-        return bool(response)
+        del self, market_id, order_id
+        reject_live_execution()
 
     def get_position(self, market_id: str) -> float:
         """Return an approximate YES-equivalent position from authenticated trades."""
@@ -575,15 +528,23 @@ class PolymarketAdapter:
         slippage_bps = 0.0
         if avg_fill_price is not None and order.limit_price is not None and order.limit_price > 0:
             if order.side == OrderSide.BUY:
-                slippage_bps = max(avg_fill_price - order.limit_price, 0.0) / order.limit_price * 10_000.0
+                slippage_bps = (
+                    max(avg_fill_price - order.limit_price, 0.0) / order.limit_price * 10_000.0
+                )
             else:
-                slippage_bps = max(order.limit_price - avg_fill_price, 0.0) / order.limit_price * 10_000.0
+                slippage_bps = (
+                    max(order.limit_price - avg_fill_price, 0.0) / order.limit_price * 10_000.0
+                )
 
         return ExecutionReport(
             order=order,
             filled_size=filled_size,
             avg_fill_price=avg_fill_price,
-            fills=[(avg_fill_price, filled_size)] if avg_fill_price is not None and filled_size > 0 else [],
+            fills=(
+                [(avg_fill_price, filled_size)]
+                if avg_fill_price is not None and filled_size > 0
+                else []
+            ),
             slippage_bps=slippage_bps,
             fee_total=0.0,
             execution_mode="live",
@@ -602,41 +563,9 @@ class PolymarketAdapter:
         )
 
     def _get_trading_client(self) -> Any:
-        if self._trading_client is not None:
-            return self._trading_client
+        """Reject direct attempts to obtain an authenticated mutation-capable client."""
 
-        try:
-            from py_clob_client.client import ClobClient
-            from py_clob_client.clob_types import ApiCreds, BalanceAllowanceParams, OrderArgs, OrderType
-            try:
-                from py_clob_client.clob_types import PartialCreateOrderOptions
-            except ImportError:
-                PartialCreateOrderOptions = None
-        except ImportError as exc:
-            raise RuntimeError(
-                "Authenticated Polymarket trading requires the official py_clob_client "
-                "package. Install it in the runtime environment before placing orders."
-            ) from exc
-
-        creds = ApiCreds(
-            api_key=str(self.api_key),
-            api_secret=str(self.api_secret),
-            api_passphrase=str(self.api_passphrase),
-        )
-        client = ClobClient(
-            host=self.base_url,
-            chain_id=self.chain_id,
-            key=str(self.private_key),
-            creds=creds,
-            signature_type=self.signature_type,
-            funder=str(self.funder),
-        )
-        client.OrderArgs = OrderArgs
-        client.OrderType = OrderType
-        client.BalanceAllowanceParams = BalanceAllowanceParams
-        client.PartialCreateOrderOptions = PartialCreateOrderOptions
-        self._trading_client = client
-        return client
+        reject_live_execution()
 
     def _build_balance_allowance_params(self, client: Any) -> Any:
         params_type = self._client_attr(client, "BalanceAllowanceParams")

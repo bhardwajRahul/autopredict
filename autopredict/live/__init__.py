@@ -1,6 +1,7 @@
-"""Live trading infrastructure for AutoPredict.
+"""Paper/shadow infrastructure and safety-audit helpers for AutoPredict.
 
-Provides paper trading simulation and live trading execution with safety controls.
+The retained ``autopredict.live.trader.LiveTrader`` compatibility target always
+raises, and is deliberately not exported from this public package namespace.
 """
 
 from autopredict.core.types import ExecutionReport, Order
@@ -10,7 +11,6 @@ from .safety_audit import SafetyAuditResult, run_safety_audit
 
 __all__ = [
     "PaperTrader",
-    "LiveTrader",
     "ExecutionReport",
     "Order",
     "RiskManager",
@@ -26,8 +26,8 @@ __all__ = [
 def __getattr__(name: str):
     """Keep legacy trader imports lazy so shadow imports have no live capability."""
 
-    if name in {"PaperTrader", "LiveTrader"}:
-        from .trader import LiveTrader, PaperTrader
+    if name == "PaperTrader":
+        from .trader import PaperTrader
 
-        return {"PaperTrader": PaperTrader, "LiveTrader": LiveTrader}[name]
+        return PaperTrader
     raise AttributeError(name)
